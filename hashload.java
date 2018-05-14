@@ -4,6 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.util.*;
+import java.lang.Long;
 
 public class hashload implements dbimpl
 {
@@ -69,16 +70,18 @@ public class hashload implements dbimpl
       //a record is made up of a business name, a delimiter, a page offset, and a line feed
       int longSize = 8;
       int charSize = 1;
-      int recordSize = BN_NAME_SIZE + charSize + longSize + charSize;
-      int noOfRecordsInBucket = 3;
-      int bucketSize = recordSize * noOfRecordsInBucket;
-      int hashIndexSlots = 10000;
+      int hashRecordSize = BN_NAME_SIZE + charSize + longSize + charSize;
+      int noOfRecordsInBucket = 1000;
+      int bucketSize = hashRecordSize * noOfRecordsInBucket;
+      int hashIndexSlots = 100;
+      int hashIndex;
+      byte[] bucket;
 
       //this list stores each bucket
       ArrayList<byte[]> buckets = new ArrayList<byte[]>(hashIndexSlots);
-      for(int i = 0; i < buckets.size(); ++i) {
-        byte[] bucket = new byte[bucketSize];
-        buckets.add(bucket);
+      for(int i = 0; i < hashIndexSlots; ++i) {
+        byte[] b = new byte[bucketSize];
+        buckets.add(b);
       }
 
       try
@@ -98,19 +101,32 @@ public class hashload implements dbimpl
             {
                byte[] bRecord = new byte[RECORD_SIZE];
                byte[] bRid = new byte[intSize];
-               //byte array for storing the name
                byte[] bName = new byte[BN_NAME_SIZE];
+               //byte array for storing the hash record
+               byte[] hashRecord = new byte[hashRecordSize];
+               byte[] offset;
                try
                {
                   System.arraycopy(bPage, recordLen, bRecord, 0, RECORD_SIZE);
                   System.arraycopy(bRecord, 0, bRid, 0, intSize);
-                  //copy the name from the record into the name byte array
                   System.arraycopy(bRecord, BN_NAME_OFFSET, bName, 0, BN_NAME_SIZE);
-                  
-                  //get a hash index based off of the records name
-                  int hashIndex = new String(bName).hashCode() % 10000;
+                  //copy the name from the record into the hash record byte array
+                  System.arraycopy(bName, 0, hashRecord, 0, BN_NAME_SIZE);
+                  hashRecord[BN_NAME_SIZE] = 44;
 
-                  System.out.println(hashIndex);
+                  //get the offset in the heap file and copy it into the hash record byte array
+                  long offsetVal = pageCount * pagesize + recCount * RECORD_SIZE;
+                  offset = ByteBuffer.allocate(longSize).putLong(offsetVal).array();
+                  System.arraycopy(offset, 0, hashRecord, BN_NAME_SIZE + charSize, longSize);
+                  hashRecord[hashRecordSize-1] = 10;
+
+                  //get a hash index based off of the records name
+                  hashIndex = new String(bName).hashCode() % hashIndexSlots;
+                  hashIndex = (hashIndex < 0) ? hashIndex * -1 : hashIndex;
+
+                  //insert into the right bucket the record
+                  bucket = buckets.get(hashIndex);
+                  insertIntoBucket(bucket, hashRecord, hashRecordSize);
 
                   rid = ByteBuffer.wrap(bRid).getInt();
                   if (rid != recCount)
@@ -119,7 +135,7 @@ public class hashload implements dbimpl
                   }
                   else
                   {
-                     System.out.println(new String(bName));
+                     //System.out.println(new String(bName));
                      recordLen += RECORD_SIZE;
                   }
                   recCount++;
@@ -149,5 +165,24 @@ public class hashload implements dbimpl
       {
          e.printStackTrace();
       }
+      for(int j = 0; j < buckets.size(); ++j) {
+        System.out.println(new String(buckets.get(j)));
+        System.out.println("--------------------------------------------------------");
+      }
    }
+
+  public void insertIntoBucket(byte[] bucket, byte[] hRecord, int hRecordSize) {
+    if(bucket[0] == 0) {
+      System.arraycopy(hRecord, 0, bucket, 0, hRecordSize);
+      bucket[hRecordSize] = 37;
+    } else {
+      for(int i = 0; i < bucket.length; ++i) {
+        if(bucket[i] == 37) {
+          System.arraycopy(hRecord, 0, bucket, i, hRecordSize);
+          bucket[i + hRecordSize] = 37;
+          break;
+        }  
+      }
+    }
+  }
 }
