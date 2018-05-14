@@ -3,8 +3,8 @@ import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.*;
-import java.lang.Long;
 
 public class hashload implements dbimpl
 {
@@ -63,6 +63,7 @@ public class hashload implements dbimpl
       int recCount = 0;
       int recordLen = 0;
       int rid = 0;
+      int hashIndex;
       boolean isNextPage = true;
       boolean isNextRecord = true;
 
@@ -73,20 +74,22 @@ public class hashload implements dbimpl
       int hashRecordSize = BN_NAME_SIZE + charSize + longSize + charSize;
       int noOfRecordsInBucket = 1000;
       int bucketSize = hashRecordSize * noOfRecordsInBucket;
-      int hashIndexSlots = 100;
-      int hashIndex;
-      byte[] bucket;
+      int noOfIndexSlots = 100;
 
       //this list stores each bucket
-      ArrayList<byte[]> buckets = new ArrayList<byte[]>(hashIndexSlots);
-      for(int i = 0; i < hashIndexSlots; ++i) {
+      ArrayList<byte[]> buckets = new ArrayList<byte[]>(noOfIndexSlots);
+      for(int i = 0; i < noOfIndexSlots; ++i) {
         byte[] b = new byte[bucketSize];
         buckets.add(b);
       }
 
+      //this array keeps track of the size of each bucket so we can insert easily
+      int[] currBucketSize = new int[noOfIndexSlots];
+
       try
       {
          FileInputStream fis = new FileInputStream(heapfile);
+         //FileOutputStream fos = new FileOutputStream("hashfile");
          // reading page by page
          while (isNextPage)
          {
@@ -110,7 +113,7 @@ public class hashload implements dbimpl
                   System.arraycopy(bPage, recordLen, bRecord, 0, RECORD_SIZE);
                   System.arraycopy(bRecord, 0, bRid, 0, intSize);
                   System.arraycopy(bRecord, BN_NAME_OFFSET, bName, 0, BN_NAME_SIZE);
-                  //copy the name from the record into the hash record byte array
+                  //copy the name into the hash record byte array
                   System.arraycopy(bName, 0, hashRecord, 0, BN_NAME_SIZE);
                   hashRecord[BN_NAME_SIZE] = 44;
 
@@ -121,12 +124,8 @@ public class hashload implements dbimpl
                   hashRecord[hashRecordSize-1] = 10;
 
                   //get a hash index based off of the records name
-                  hashIndex = new String(bName).hashCode() % hashIndexSlots;
+                  hashIndex = new String(bName).hashCode() % noOfIndexSlots;
                   hashIndex = (hashIndex < 0) ? hashIndex * -1 : hashIndex;
-
-                  //insert into the right bucket the record
-                  bucket = buckets.get(hashIndex);
-                  insertIntoBucket(bucket, hashRecord, hashRecordSize);
 
                   rid = ByteBuffer.wrap(bRid).getInt();
                   if (rid != recCount)
@@ -135,7 +134,9 @@ public class hashload implements dbimpl
                   }
                   else
                   {
-                     //System.out.println(new String(bName));
+                     //insert into the record into the right bucket
+                     System.arraycopy(hashRecord, 0, buckets.get(hashIndex), currBucketSize[hashIndex], hashRecordSize);
+                     currBucketSize[hashIndex] += hashRecordSize;
                      recordLen += RECORD_SIZE;
                   }
                   recCount++;
@@ -156,6 +157,12 @@ public class hashload implements dbimpl
             }
             pageCount++;
          }
+         //write out the hash file using the buckets
+         for(int j = 0; j < buckets.size(); ++j) {
+           System.out.println(buckets.get(j).length);
+           //fos.write(buckets.get(j));  
+         }
+
       }
       catch (FileNotFoundException e)
       {
@@ -165,24 +172,10 @@ public class hashload implements dbimpl
       {
          e.printStackTrace();
       }
+      //write out buckets to a hash file
       for(int j = 0; j < buckets.size(); ++j) {
         System.out.println(new String(buckets.get(j)));
         System.out.println("--------------------------------------------------------");
       }
    }
-
-  public void insertIntoBucket(byte[] bucket, byte[] hRecord, int hRecordSize) {
-    if(bucket[0] == 0) {
-      System.arraycopy(hRecord, 0, bucket, 0, hRecordSize);
-      bucket[hRecordSize] = 37;
-    } else {
-      for(int i = 0; i < bucket.length; ++i) {
-        if(bucket[i] == 37) {
-          System.arraycopy(hRecord, 0, bucket, i, hRecordSize);
-          bucket[i + hRecordSize] = 37;
-          break;
-        }  
-      }
-    }
-  }
 }
