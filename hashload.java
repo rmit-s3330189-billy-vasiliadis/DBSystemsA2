@@ -63,7 +63,7 @@ public class hashload implements dbimpl
       int recCount = 0;
       int recordLen = 0;
       int rid = 0;
-      int hashIndex;
+      int hashIndex = 0;
       boolean isNextPage = true;
       boolean isNextRecord = true;
 
@@ -77,10 +77,14 @@ public class hashload implements dbimpl
       //this array keeps track of the size of each bucket so we can insert easily
       int[] currBucketSize = new int[noOfIndexSlots];
 
+      FileInputStream fis = null;
+      FileOutputStream fos = null;
+
       try
       {
-         FileInputStream fis = new FileInputStream(heapfile);
-         FileOutputStream fos = new FileOutputStream("hash." + pagesize);
+         fis = new FileInputStream(heapfile);
+         fos = new FileOutputStream("hash." + pagesize);
+ 
          // reading page by page
          while (isNextPage)
          {
@@ -119,8 +123,13 @@ public class hashload implements dbimpl
                   hashIndex = (hashIndex < 0) ? hashIndex * -1 : hashIndex;
                   
                   //if the bucket does not have enough space, find the next one that does
+                  //if there is not enough space left in the hash file, write out what fits
                   while(true) {
-                    if(currBucketSize[hashIndex] == bucketSize) {
+                    if(hashIndex >= noOfIndexSlots) {
+                      System.out.println("Hash file too small, change the variables in dbimp, file does not contain all records");
+                      hashIndex = -1;
+											break;
+                    } else if(currBucketSize[hashIndex] == bucketSize) {
                       hashIndex++;  
                     } else {
                       break;  
@@ -131,6 +140,9 @@ public class hashload implements dbimpl
                   if (rid != recCount)
                   {
                      isNextRecord = false;
+                  } else if(hashIndex < 0)
+                  {
+                     break;
                   }
                   else
                   {
@@ -156,6 +168,7 @@ public class hashload implements dbimpl
                isNextPage = false;
             }
             pageCount++;
+            if(hashIndex < 0) break;
          }
          //write out the hash file using the buckets
          for(int j = 0; j < buckets.size(); ++j) {
@@ -170,6 +183,18 @@ public class hashload implements dbimpl
       catch (IOException e)
       {
          e.printStackTrace();
+      } finally {
+        //close the streams
+        try {
+          if(fis != null) {
+            fis.close();
+          }
+          if(fos != null) {
+            fos.close();
+          }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
       }
    }
 }

@@ -56,10 +56,13 @@ public class hashquery implements dbimpl
    {
       File hashfile = new File("hash." + pagesize);
       long heapOffset = -1;
+			
+      RandomAccessFile hash = null;
+      RandomAccessFile heap = null;
 
       try
       {
-         RandomAccessFile hash = new RandomAccessFile(hashfile, "r");
+         hash = new RandomAccessFile(hashfile, "r");
         
          //put the query into a byte array so that the hash code is the same as in the hash load file
          byte[] query = new byte[BN_NAME_SIZE];
@@ -80,8 +83,10 @@ public class hashquery implements dbimpl
          byte[] record = new byte[hashRecordSize];
          byte[] bName = new byte[BN_NAME_SIZE];
          byte[] offset = new byte[longSize];
-         while(true) {
-           hash.read(record, 0, hashRecordSize);
+         int val = 1;
+         while(val > 0) {
+           val = hash.read(record, 0, hashRecordSize);
+           System.out.println(val);
            System.arraycopy(record, 0, bName, 0, BN_NAME_SIZE);
            System.out.println(new String(bName));
            if(ByteBuffer.wrap(bName).getInt() == 0) {
@@ -96,7 +101,7 @@ public class hashquery implements dbimpl
          //if a record in the hash file was found, find it in the heap file and print it to the console
          if(heapOffset > 0) {
            byte[] heapRecord = new byte[RECORD_SIZE];
-           RandomAccessFile heap = new RandomAccessFile("heap." + pagesize, "r");
+           heap = new RandomAccessFile("heap." + pagesize, "r");
            heap.seek(heapOffset);
            heap.read(heapRecord, 0, RECORD_SIZE);
            System.out.println(new String(heapRecord));
@@ -109,6 +114,18 @@ public class hashquery implements dbimpl
       catch (IOException e)
       {
          e.printStackTrace();
+      } finally {
+        //close the streams
+        try {
+          if(hash != null) {
+            hash.close();
+          }
+          if(heap != null) {
+            heap.close();
+          }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
       }
    }
 }
