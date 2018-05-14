@@ -13,7 +13,7 @@ public class hashload implements dbimpl
    {
       hashload load = new hashload();
 
-      // calculate query time
+      // calculate time to create hash file
       long startTime = System.currentTimeMillis();
       load.readArguments(args);
       long endTime = System.currentTimeMillis();
@@ -67,15 +67,6 @@ public class hashload implements dbimpl
       boolean isNextPage = true;
       boolean isNextRecord = true;
 
-      //these variables are used to determine the size of a bucket
-      //a record is made up of a business name, a delimiter, a page offset, and a line feed
-      int longSize = 8;
-      int charSize = 1;
-      int hashRecordSize = BN_NAME_SIZE + charSize + longSize + charSize;
-      int noOfRecordsInBucket = 1000;
-      int bucketSize = hashRecordSize * noOfRecordsInBucket;
-      int noOfIndexSlots = 100;
-
       //this list stores each bucket
       ArrayList<byte[]> buckets = new ArrayList<byte[]>(noOfIndexSlots);
       for(int i = 0; i < noOfIndexSlots; ++i) {
@@ -89,7 +80,7 @@ public class hashload implements dbimpl
       try
       {
          FileInputStream fis = new FileInputStream(heapfile);
-         //FileOutputStream fos = new FileOutputStream("hashfile");
+         FileOutputStream fos = new FileOutputStream("hash." + pagesize);
          // reading page by page
          while (isNextPage)
          {
@@ -115,17 +106,26 @@ public class hashload implements dbimpl
                   System.arraycopy(bRecord, BN_NAME_OFFSET, bName, 0, BN_NAME_SIZE);
                   //copy the name into the hash record byte array
                   System.arraycopy(bName, 0, hashRecord, 0, BN_NAME_SIZE);
-                  hashRecord[BN_NAME_SIZE] = 44;
+                  hashRecord[BN_NAME_SIZE] = delim;
 
                   //get the offset in the heap file and copy it into the hash record byte array
                   long offsetVal = pageCount * pagesize + recCount * RECORD_SIZE;
                   offset = ByteBuffer.allocate(longSize).putLong(offsetVal).array();
                   System.arraycopy(offset, 0, hashRecord, BN_NAME_SIZE + charSize, longSize);
-                  hashRecord[hashRecordSize-1] = 10;
+                  hashRecord[hashRecordSize-1] = lineFeed;
 
                   //get a hash index based off of the records name
                   hashIndex = new String(bName).hashCode() % noOfIndexSlots;
                   hashIndex = (hashIndex < 0) ? hashIndex * -1 : hashIndex;
+                  
+                  //if the bucket does not have enough space, find the next one that does
+                  while(true) {
+                    if(currBucketSize[hashIndex] == bucketSize) {
+                      hashIndex++;  
+                    } else {
+                      break;  
+                    }
+                  }
 
                   rid = ByteBuffer.wrap(bRid).getInt();
                   if (rid != recCount)
@@ -159,8 +159,7 @@ public class hashload implements dbimpl
          }
          //write out the hash file using the buckets
          for(int j = 0; j < buckets.size(); ++j) {
-           System.out.println(buckets.get(j).length);
-           //fos.write(buckets.get(j));  
+           fos.write(buckets.get(j));  
          }
 
       }
@@ -171,11 +170,6 @@ public class hashload implements dbimpl
       catch (IOException e)
       {
          e.printStackTrace();
-      }
-      //write out buckets to a hash file
-      for(int j = 0; j < buckets.size(); ++j) {
-        System.out.println(new String(buckets.get(j)));
-        System.out.println("--------------------------------------------------------");
       }
    }
 }

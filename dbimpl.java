@@ -22,6 +22,17 @@ public interface dbimpl
    public static final int BN_ABN_SIZE = 20;
    public static final int EOF_PAGENUM_SIZE = 4;
 
+	 //these variables are used to determine the size of a bucket
+   //a record is made up of a business name, a delimiter, a page offset, and a line feed
+   public static final int longSize = 8;
+   public static final int charSize = 1;
+   public static final int hashRecordSize = BN_NAME_SIZE + charSize + longSize + charSize;
+   public static final int noOfRecordsInBucket = 1000;
+   public static final int bucketSize = hashRecordSize * noOfRecordsInBucket;
+   public static final int noOfIndexSlots = 1000;
+	 public static final int delim = 124;
+   public static final int lineFeed = 10;
+
    public static final int BN_NAME_OFFSET = RID_SIZE
                            + REGISTER_NAME_SIZE;
 
