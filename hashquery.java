@@ -66,15 +66,13 @@ public class hashquery implements dbimpl
      byte[] offset = new byte[longSize];
      try {
        while(hash.getFilePointer() < finalOffset) {
-         hash.read(record, 0, hashRecordSize);
          if(hash.getFilePointer() == nextBucketOffset) { 
            bucketNo++;
            nextBucketOffset += bucketSize;
          }
+         hash.read(record, 0, hashRecordSize);
          recNo++;
-         //System.out.println("offset: " + hash.getFilePointer());
          System.arraycopy(record, 0, bName, 0, BN_NAME_SIZE);
-         //System.out.println(new String(bName));
          if(ByteBuffer.wrap(bName).getInt() == 0) {
           return true;  
          } 
