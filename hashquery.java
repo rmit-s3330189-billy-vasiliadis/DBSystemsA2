@@ -57,22 +57,31 @@ public class hashquery implements dbimpl
       return isValidInt;
    }
 
-   public boolean findRecord(String name, long finalOffset) {
+   public boolean findRecord(String name, long finalOffset, long nextBucketOffset) {
      String line;
+     int recNo = 0;
+     int bucketNo = 1;
      byte[] record = new byte[hashRecordSize];
      byte[] bName = new byte[BN_NAME_SIZE];
      byte[] offset = new byte[longSize];
      try {
        while(hash.getFilePointer() < finalOffset) {
          hash.read(record, 0, hashRecordSize);
-         System.out.println("offset: " + hash.getFilePointer());
+         if(hash.getFilePointer() == nextBucketOffset) { 
+           bucketNo++;
+           nextBucketOffset += bucketSize;
+         }
+         recNo++;
+         //System.out.println("offset: " + hash.getFilePointer());
          System.arraycopy(record, 0, bName, 0, BN_NAME_SIZE);
-         System.out.println(new String(bName));
+         //System.out.println(new String(bName));
          if(ByteBuffer.wrap(bName).getInt() == 0) {
           return true;  
          } 
          else if((new String(bName)).trim().equals(name)) {
            System.arraycopy(record, BN_NAME_SIZE + 1, offset, 0, longSize);
+           System.out.println("Buckets visited: " + bucketNo);
+           System.out.println("Records scanned until match: " + recNo); 
            heapOffset = ByteBuffer.wrap(offset).getLong();
            return true;
          }
@@ -105,18 +114,18 @@ public class hashquery implements dbimpl
          hash.seek(hashOffset);
 
          //look for the record starting from the offset until we get to the end of the file
-         eof = !findRecord(name, hashFileSize); 
+         eof = !findRecord(name, hashFileSize, hashOffset + bucketSize); 
 
          //if we get to the end of the file without finding the record, and because hashload uses linear probing,
          //then check from the start of the file until we get to our initial bucket
          if(eof) {
           //reset the pointer to the start of the file
           hash.seek(0);  
-          findRecord(name, hashOffset);
+          findRecord(name, hashOffset, hashOffset + bucketSize);
          }
 
          //if a record in the hash file was found, find it in the heap file and print it to the console
-         if(heapOffset > 0) {
+         if(heapOffset >= 0) {
            byte[] heapRecord = new byte[RECORD_SIZE];
            heap = new RandomAccessFile("heap." + pagesize, "r");
            heap.seek(heapOffset);

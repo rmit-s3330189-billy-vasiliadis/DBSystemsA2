@@ -70,10 +70,9 @@ public class hashload implements dbimpl
       //this list stores each bucket
       ArrayList<byte[]> buckets = new ArrayList<byte[]>(noOfIndexSlots);
       for(int i = 0; i < noOfIndexSlots; ++i) {
-        byte[] b = new byte[bucketSize];
-        buckets.add(b);
+        buckets.add(null);
       }
-
+      
       //this array keeps track of the size of each bucket so we can insert easily
       int[] currBucketSize = new int[noOfIndexSlots];
 
@@ -120,7 +119,7 @@ public class hashload implements dbimpl
                   //copy the name into the hash record byte array
                   System.arraycopy(bName, 0, hashRecord, 0, BN_NAME_SIZE);
                   hashRecord[BN_NAME_SIZE] = delim;
-
+                  
                   //get the offset in the heap file and copy it into the hash record byte array
                   long offsetVal = pageCount * pagesize + recCount * RECORD_SIZE;
                   offset = ByteBuffer.allocate(longSize).putLong(offsetVal).array();
@@ -160,8 +159,13 @@ public class hashload implements dbimpl
                   }
                   else
                   {
+                     byte[] bucket;
+                     if((bucket = buckets.get(hashIndex)) == null) {
+                       buckets.set(hashIndex, new byte[bucketSize]);
+                       bucket = buckets.get(hashIndex);
+                     }
                      //insert into the record into the right bucket
-                     System.arraycopy(hashRecord, 0, buckets.get(hashIndex), currBucketSize[hashIndex], hashRecordSize);
+                     System.arraycopy(hashRecord, 0, bucket, currBucketSize[hashIndex], hashRecordSize);
                      currBucketSize[hashIndex] += hashRecordSize;
                      recordLen += RECORD_SIZE;
                   }
@@ -185,8 +189,12 @@ public class hashload implements dbimpl
             pageCount++;
          }
          //write out the hash file using the buckets
-         for(int j = 0; j < buckets.size(); ++j) {
-           fos.write(buckets.get(j));  
+         for(int j = 0; j < noOfIndexSlots; ++j) {
+           if(buckets.get(j) == null) {
+              fos.write(new byte[bucketSize]);  
+           } else {
+              fos.write(buckets.get(j));
+           }
          }
          System.out.println("Records Read: " + recordsRead);
       }
