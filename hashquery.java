@@ -6,6 +6,11 @@ import java.io.RandomAccessFile;
 
 public class hashquery implements dbimpl
 {
+   private long heapOffset = -1;
+   private RandomAccessFile hash = null;
+   private RandomAccessFile heap = null;
+   private boolean eof;
+
    // initialize
    public static void main(String args[])
    {
@@ -52,14 +57,35 @@ public class hashquery implements dbimpl
       return isValidInt;
    }
 
+   public boolean findRecord(String name, long finalOffset) {
+     String line;
+     byte[] record = new byte[hashRecordSize];
+     byte[] bName = new byte[BN_NAME_SIZE];
+     byte[] offset = new byte[longSize];
+     try {
+       while(hash.getFilePointer() < finalOffset) {
+         hash.read(record, 0, hashRecordSize);
+         System.out.println("offset: " + hash.getFilePointer());
+         System.arraycopy(record, 0, bName, 0, BN_NAME_SIZE);
+         System.out.println(new String(bName));
+         if(ByteBuffer.wrap(bName).getInt() == 0) {
+          return true;  
+         } 
+         else if((new String(bName)).trim().equals(name)) {
+           System.arraycopy(record, BN_NAME_SIZE + 1, offset, 0, longSize);
+           heapOffset = ByteBuffer.wrap(offset).getLong();
+           return true;
+         }
+       }
+     } catch(Exception e) {
+       e.printStackTrace();  
+     }
+     return false;
+   }
+
    public void readHashFile(String name, int pagesize)
    {
       File hashfile = new File("hash." + pagesize);
-      long heapOffset = -1;
-			
-      RandomAccessFile hash = null;
-      RandomAccessFile heap = null;
-
       try
       {
          hash = new RandomAccessFile(hashfile, "r");
@@ -71,31 +97,22 @@ public class hashquery implements dbimpl
 
          //hash the name and get the index and the offset
          int hashIndex = new String(query).hashCode() % noOfIndexSlots;
-         System.out.println(hashIndex);
+         System.out.println("hash Index: " + hashIndex);
          long hashOffset = hashIndex * bucketSize;
 				 hashOffset = (hashOffset < 0) ? hashOffset * -1 : hashOffset;
 
          //seek to the position in the file
          hash.seek(hashOffset);
 
-         //read line by line until you find the matching record
-         String line;
-         byte[] record = new byte[hashRecordSize];
-         byte[] bName = new byte[BN_NAME_SIZE];
-         byte[] offset = new byte[longSize];
-         int val = 1;
-         while(val > 0) {
-           val = hash.read(record, 0, hashRecordSize);
-           System.out.println(val);
-           System.arraycopy(record, 0, bName, 0, BN_NAME_SIZE);
-           System.out.println(new String(bName));
-           if(ByteBuffer.wrap(bName).getInt() == 0) {
-            break;  
-           } else if((new String(bName)).trim().equals(name)) {
-             System.arraycopy(record, BN_NAME_SIZE + 1, offset, 0, longSize);
-             heapOffset = ByteBuffer.wrap(offset).getLong();
-             break;
-           }
+         //look for the record starting from the offset until we get to the end of the file
+         eof = !findRecord(name, hashFileSize); 
+
+         //if we get to the end of the file without finding the record, and because hashload uses linear probing,
+         //then check from the start of the file until we get to our initial bucket
+         if(eof) {
+          //reset the pointer to the start of the file
+          hash.seek(0);  
+          findRecord(name, hashOffset);
          }
 
          //if a record in the hash file was found, find it in the heap file and print it to the console
@@ -105,6 +122,8 @@ public class hashquery implements dbimpl
            heap.seek(heapOffset);
            heap.read(heapRecord, 0, RECORD_SIZE);
            System.out.println(new String(heapRecord));
+         } else {
+           System.out.println("No matching record");  
          }
       }
       catch (FileNotFoundException e)

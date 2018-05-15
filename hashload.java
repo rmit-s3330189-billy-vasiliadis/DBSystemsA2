@@ -79,6 +79,7 @@ public class hashload implements dbimpl
 
       FileInputStream fis = null;
       FileOutputStream fos = null;
+      int recordsRead = 0;
 
       try
       {
@@ -86,7 +87,7 @@ public class hashload implements dbimpl
          fos = new FileOutputStream("hash." + pagesize);
  
          // reading page by page
-         while (isNextPage)
+         while (isNextPage && hashIndex >= 0)
          {
             byte[] bPage = new byte[pagesize];
             byte[] bPageNum = new byte[intSize];
@@ -107,6 +108,14 @@ public class hashload implements dbimpl
                {
                   System.arraycopy(bPage, recordLen, bRecord, 0, RECORD_SIZE);
                   System.arraycopy(bRecord, 0, bRid, 0, intSize);
+
+                  rid = ByteBuffer.wrap(bRid).getInt();
+                  if (rid != recCount)
+                  {
+                     isNextRecord = false;
+                     break;
+                  }
+
                   System.arraycopy(bRecord, BN_NAME_OFFSET, bName, 0, BN_NAME_SIZE);
                   //copy the name into the hash record byte array
                   System.arraycopy(bName, 0, hashRecord, 0, BN_NAME_SIZE);
@@ -124,23 +133,28 @@ public class hashload implements dbimpl
                   
                   //if the bucket does not have enough space, find the next one that does
                   //if there is not enough space left in the hash file, write out what fits
+                  int initHashIndex = -1;
+                  int temp = hashIndex;
                   while(true) {
-                    if(hashIndex >= noOfIndexSlots) {
+                    if(hashIndex == initHashIndex) {
                       System.out.println("Hash file too small, change the variables in dbimp, file does not contain all records");
+                      System.out.println("end at : " + new String(bName));
                       hashIndex = -1;
-											break;
-                    } else if(currBucketSize[hashIndex] == bucketSize) {
+                      break;
+                    }
+                    else if(hashIndex == noOfIndexSlots) {
+                      hashIndex = 0;
+                      initHashIndex = temp;
+                    } 
+                    else if(currBucketSize[hashIndex] == bucketSize) {
                       hashIndex++;  
-                    } else {
+                    } 
+                    else {
                       break;  
                     }
                   }
 
-                  rid = ByteBuffer.wrap(bRid).getInt();
-                  if (rid != recCount)
-                  {
-                     isNextRecord = false;
-                  } else if(hashIndex < 0)
+                  if(hashIndex < 0)
                   {
                      break;
                   }
@@ -152,6 +166,7 @@ public class hashload implements dbimpl
                      recordLen += RECORD_SIZE;
                   }
                   recCount++;
+                  recordsRead++;
                   // if recordLen exceeds pagesize, catch this to reset to next page
                }
                catch (ArrayIndexOutOfBoundsException e)
@@ -168,13 +183,12 @@ public class hashload implements dbimpl
                isNextPage = false;
             }
             pageCount++;
-            if(hashIndex < 0) break;
          }
          //write out the hash file using the buckets
          for(int j = 0; j < buckets.size(); ++j) {
            fos.write(buckets.get(j));  
          }
-
+         System.out.println("Records Read: " + recordsRead);
       }
       catch (FileNotFoundException e)
       {
